@@ -62,12 +62,12 @@
             return 'MC-' + Math.random().toString(36).substring(2, 8).toUpperCase();
         }
 
-        let users = JSON.parse(localStorage.getItem('casino_users_v20')) || [
+        let users = JSON.parse(localStorage.getItem('casino_users_v21')) || [
             { id: 'kimwy050928', pw: '@Kimwy050928', code: 'MC-ADMIN', balance: 1000000, points: 0, role: 'admin' },
             { id: 'user1', pw: '1234', code: generateUniqueCode(), balance: 10000, points: 0, role: 'user' }
         ];
 
-        let currentUser = JSON.parse(localStorage.getItem('casino_current_user_v20')) || null;
+        let currentUser = JSON.parse(localStorage.getItem('casino_current_user_v21')) || null;
         let currentTab = currentUser ? 'lobby' : 'login';
 
         let lastPlayerCards = [];
@@ -86,13 +86,13 @@
         let currentBetAmount = 0;
 
         function saveData() {
-            localStorage.setItem('casino_users_v20', JSON.stringify(users));
+            localStorage.setItem('casino_users_v21', JSON.stringify(users));
             if (currentUser) {
                 const latestMe = users.find(u => u.id === currentUser.id);
                 if (latestMe) currentUser = latestMe;
-                localStorage.setItem('casino_current_user_v20', JSON.stringify(currentUser));
+                localStorage.setItem('casino_current_user_v21', JSON.stringify(currentUser));
             } else {
-                localStorage.removeItem('casino_current_user_v20');
+                localStorage.removeItem('casino_current_user_v21');
             }
         }
 
@@ -432,7 +432,6 @@
             hasPlacedBetThisRound = true;
             currentUser.balance -= currentBetAmount;
 
-            // 배팅 금액의 0.05% 포인트 적립
             const earnedPoints = currentBetAmount * 0.0005;
             currentUser.points = (currentUser.points || 0) + earnedPoints;
 
@@ -674,4 +673,5 @@
     </script>
 </body>
 </html>
+
 
