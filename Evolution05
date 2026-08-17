@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVOLUTION SPEED BACCARAT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes dealCard {
+            0% { transform: translateY(-40px) scale(0.8); opacity: 0; }
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        .card-anim { animation: dealCard 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 15px rgba(225, 29, 72, 0.2); }
+            50% { box-shadow: 0 0 25px rgba(225, 29, 72, 0.4); }
+        }
+        .studio-glow { animation: pulseGlow 3s infinite ease-in-out; }
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow-x: hidden;
+            background-color: #0c0a09;
+            color: #f4f4f5;
+        }
+    </style>
+</head>
+<body class="bg-stone-950 text-stone-100 font-sans min-h-screen flex flex-col justify-between select-none m-0 p-0">
+
+    <!-- 메인 컨테이너 -->
+    <div id="app" class="flex-1 flex flex-col w-full max-w-6xl mx-auto relative pb-24 min-h-screen">
+        <!-- 동적 렌더링 영역 -->
+    </div>
+
+    <!-- 커스텀 모달 레이어 -->
+    <div id="custom-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-stone-900 border border-stone-800 rounded-3xl p-8 w-full max-w-md space-y-5 shadow-2xl">
+            <h3 id="modal-title" class="text-lg font-bold text-stone-100">정보 수정</h3>
+            <div id="modal-body" class="space-y-4"></div>
+            <div class="flex gap-3 pt-2">
+                <button onclick="closeModal()" class="flex-1 bg-stone-800 hover:bg-stone-700 text-stone-300 py-3 rounded-2xl text-xs font-bold transition cursor-pointer">취소</button>
+                <button id="modal-submit-btn" class="flex-1 bg-stone-100 hover:bg-white text-stone-950 py-3 rounded-2xl text-xs font-black transition cursor-pointer shadow-lg">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상단/하단 네비게이션 바 -->
+    <nav id="bottom-nav" class="hidden fixed bottom-0 left-0 right-0 bg-stone-900/90 backdrop-blur-md border-t border-stone-800/80 flex justify-center gap-6 py-3.5 z-50 shadow-2xl">
+        <button onclick="switchTab('lobby')" class="flex items-center gap-2 text-xs text-stone-300 font-bold hover:text-white cursor-pointer px-5 py-2 rounded-xl bg-stone-800/50 hover:bg-stone-800 transition">
+            <span>🏠</span> 로비
+        </button>
+        <button onclick="switchTab('baccarat')" class="flex items-center gap-2 text-xs text-stone-400 font-medium hover:text-white cursor-pointer px-5 py-2 rounded-xl bg-stone-800/50 hover:bg-stone-800 transition">
+            <span>🃏</span> 라이브 바카라
+        </button>
+        <button id="admin-nav-btn" onclick="switchTab('admin')" class="hidden flex items-center gap-2 text-xs text-stone-400 font-medium hover:text-white cursor-pointer px-5 py-2 rounded-xl bg-stone-800/50 hover:bg-stone-800 transition">
+            <span>⚙️</span> 회원 관리 센터
+        </button>
+    </nav>
+
+    <script>
+        function generateUniqueCode() {
+            return 'MC-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        let users = JSON.parse(localStorage.getItem('casino_users_v20')) || [
+            { id: 'kimwy050928', pw: '@Kimwy050928', code: 'MC-ADMIN', balance: 1000000, points: 0, role: 'admin' },
+            { id: 'user1', pw: '1234', code: generateUniqueCode(), balance: 10000, points: 0, role: 'user' }
+        ];
+
+        let currentUser = JSON.parse(localStorage.getItem('casino_current_user_v20')) || null;
+        let currentTab = currentUser ? 'lobby' : 'login';
+
+        let lastPlayerCards = [];
+        let lastBankerCards = [];
+        let lastPlayerScore = 0;
+        let lastBankerScore = 0;
+        let lastGameMessage = "배팅 영역을 선택하고 금액을 입력하세요.";
+        let gameHistory = []; 
+        
+        let bacBetType = 'player';
+        let isBacDealing = false;
+        let timeLeft = 10;
+        let timerInterval = null;
+        let canBet = true;
+        let hasPlacedBetThisRound = false;
+        let currentBetAmount = 0;
+
+        function saveData() {
+            localStorage.setItem('casino_users_v20', JSON.stringify(users));
+            if (currentUser) {
+                const latestMe = users.find(u => u.id === currentUser.id);
+                if (latestMe) currentUser = latestMe;
+                localStorage.setItem('casino_current_user_v20', JSON.stringify(currentUser));
+            } else {
+                localStorage.removeItem('casino_current_user_v20');
+            }
+        }
+
+        function switchTab(tab) {
+            if (currentTab === 'baccarat' && tab !== 'baccarat') {
+                stopBaccaratTimer();
+            }
+            currentTab = tab;
+            render();
+            if (currentTab === 'baccarat' && currentUser) {
+                startBaccaratTimer();
+            }
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            const nav = document.getElementById('bottom-nav');
+
+            if (!currentUser) {
+                nav.classList.add('hidden');
+                stopBaccaratTimer();
+                app.innerHTML = renderAuthScreen();
+                return;
+            }
+
+            nav.classList.remove('hidden');
+            const adminBtn = document.getElementById('admin-nav-btn');
+            if (currentUser.role === 'admin') {
+                adminBtn.classList.remove('hidden');
+            } else {
+                adminBtn.classList.add('hidden');
+            }
+
+            if (currentTab === 'lobby') {
+                stopBaccaratTimer();
+                app.innerHTML = renderLobby();
+            }
+            else if (currentTab === 'baccarat') app.innerHTML = renderBaccarat();
+            else if (currentTab === 'admin' && currentUser.role === 'admin') {
+                stopBaccaratTimer();
+                app.innerHTML = renderAdmin();
+            }
+        }
+
+        let isLoginMode = true;
+        function renderAuthScreen() {
+            return `
+                <div class="flex-1 flex flex-col justify-center items-center p-6 space-y-6 w-full max-w-md mx-auto my-auto">
+                    <div class="text-center space-y-1">
+                        <h1 class="text-3xl font-black tracking-widest text-stone-100 uppercase">EVOLUTION</h1>
+                        <p class="text-[11px] text-stone-400 uppercase tracking-widest font-semibold">PREMIUM BACCARAT PORTAL</p>
+                    </div>
+                    <div class="bg-stone-900/90 backdrop-blur-xl p-8 rounded-3xl border border-stone-800 shadow-2xl space-y-5 w-full">
+                        <div class="flex bg-stone-950 p-1 rounded-2xl border border-stone-800/80 mb-6">
+                            <button onclick="isLoginMode=true; render()" class="flex-1 text-center font-bold text-xs py-2.5 rounded-xl transition cursor-pointer ${isLoginMode ? 'bg-stone-800 text-stone-100 shadow' : 'text-stone-400 hover:text-stone-200'}">로그인</button>
+                            <button onclick="isLoginMode=false; render()" class="flex-1 text-center font-bold text-xs py-2.5 rounded-xl transition cursor-pointer ${!isLoginMode ? 'bg-stone-800 text-stone-100 shadow' : 'text-stone-400 hover:text-stone-200'}">회원가입</button>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-xs text-stone-400 block mb-1.5 font-semibold">아이디</label>
+                                <input type="text" id="auth-id" class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-stone-500 text-stone-100" placeholder="아이디를 입력하세요">
+                            </div>
+                            <div>
+                                <label class="text-xs text-stone-400 block mb-1.5 font-semibold">비밀번호</label>
+                                <input type="password" id="auth-pw" class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-stone-500 text-stone-100" placeholder="비밀번호를 입력하세요">
+                            </div>
+                            <button onclick="handleAuth()" class="w-full bg-stone-100 hover:bg-white text-stone-950 font-black py-4 rounded-2xl shadow-xl transition mt-2 cursor-pointer text-sm">
+                                ${isLoginMode ? '로그인' : '회원가입 완료'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function handleAuth() {
+            const id = document.getElementById('auth-id').value.trim();
+            const pw = document.getElementById('auth-pw').value.trim();
+            if (!id || !pw) {
+                alert('아이디와 비밀번호를 입력해주세요.');
+                return;
+            }
+
+            if (isLoginMode) {
+                const found = users.find(u => u.id === id && u.pw === pw);
+                if (found) {
+                    currentUser = found;
+                    saveData();
+                    currentTab = 'lobby';
+                    render();
+                } else {
+                    alert('아이디 또는 비밀번호가 일치하지 않습니다.');
+                }
+            } else {
+                if (users.some(u => u.id === id)) {
+                    alert('이미 존재하는 아이디입니다.');
+                    return;
+                }
+                const newUser = { id, pw, code: generateUniqueCode(), balance: 10000, points: 0, role: 'user' };
+                users.push(newUser);
+                currentUser = newUser;
+                saveData();
+                alert(`회원가입 완료! (고유 코드: ${newUser.code})`);
+                currentTab = 'lobby';
+                render();
+            }
+        }
+
+        function logout() {
+            stopBaccaratTimer();
+            currentUser = null;
+            saveData();
+            render();
+        }
+
+        function renderLobby() {
+            return `
+                <header class="bg-stone-900/80 backdrop-blur-md px-8 py-5 border-b border-stone-800 flex justify-between items-center w-full">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-11 h-11 rounded-2xl bg-stone-100 text-stone-950 font-black flex items-center justify-center text-base shadow-md">EV</div>
+                        <div>
+                            <span class="text-[11px] text-stone-400 font-medium">환영합니다 (${currentUser.code})</span>
+                            <div class="font-bold text-stone-100 text-base">${currentUser.id} 님</div>
+                        </div>
+                    </div>
+                    <div class="flex gap-6 text-right">
+                        <div>
+                            <span class="text-[11px] text-stone-400 font-medium">보유 자산</span>
+                            <div class="font-black text-emerald-400 text-base">${currentUser.balance.toLocaleString()} 원</div>
+                        </div>
+                        <div>
+                            <span class="text-[11px] text-stone-400 font-medium">적립 포인트 (0.05%)</span>
+                            <div class="font-black text-amber-400 text-base">${(currentUser.points || 0).toLocaleString()} P</div>
+                        </div>
+                    </div>
+                </header>
+                <div class="flex-1 p-8 space-y-6 w-full max-w-4xl mx-auto">
+                    <div class="bg-gradient-to-br from-stone-900 via-stone-900 to-stone-950 border border-stone-800 p-8 rounded-3xl shadow-2xl flex justify-between items-center relative overflow-hidden">
+                        <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-rose-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div class="space-y-3 relative z-10">
+                            <span class="text-[10px] bg-rose-600/90 text-white font-extrabold px-3 py-1 rounded-full uppercase tracking-widest shadow">LIVE TABLE 01</span>
+                            <h2 class="text-3xl font-black text-stone-100">에볼루션 스피드 바카라</h2>
+                            <p class="text-sm text-stone-400">배팅 금액의 0.05% 포인트 자동 적립 및 실시간 공통 그림장 제공</p>
+                        </div>
+                        <button onclick="switchTab('baccarat')" class="bg-stone-100 hover:bg-white text-stone-950 font-black px-8 py-4 rounded-2xl text-sm shadow-xl transition cursor-pointer relative z-10">게임 입장</button>
+                    </div>
+                    ${currentUser.role === 'admin' ? `
+                    <div class="bg-stone-900/60 border border-stone-800 p-6 rounded-3xl text-center space-y-3 shadow-xl">
+                        <p class="text-xs text-stone-400 font-bold uppercase tracking-wider">관리자 전용 제어판</p>
+                        <button onclick="switchTab('admin')" class="w-full bg-stone-800 hover:bg-stone-700 font-bold text-xs py-3.5 rounded-2xl text-stone-200 transition cursor-pointer border border-stone-700/60 shadow">회원 정보 수정 및 머니 관리 센터</button>
+                    </div>` : ''}
+                    <button onclick="logout()" class="w-full bg-transparent hover:bg-stone-900/50 border border-stone-800/80 text-stone-400 hover:text-stone-200 font-bold py-4 rounded-2xl text-xs transition cursor-pointer">로그아웃</button>
+                </div>
+            `;
+        }
+
+        function renderAdmin() {
+            return `
+                <header class="bg-stone-900/80 backdrop-blur-md px-8 py-5 border-b border-stone-800 flex justify-between items-center w-full">
+                    <h1 class="font-bold text-stone-100 text-base">⚙️ 회원 정보 및 머니 관리 센터</h1>
+                    <span class="text-xs text-stone-400 bg-stone-800/80 px-3.5 py-1.5 rounded-xl font-semibold">총 회원: ${users.length}명</span>
+                </header>
+                <div class="flex-1 p-8 space-y-4 overflow-y-auto w-full max-w-4xl mx-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${users.map(u => `
+                            <div class="bg-stone-900/80 border border-stone-800/90 p-5 rounded-3xl space-y-3 shadow-xl">
+                                <div class="flex justify-between items-center">
+                                    <div class="space-y-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-bold text-sm text-stone-100">${u.id}</span>
+                                            <span class="text-[10px] bg-stone-800 text-amber-400 font-mono px-2 py-0.5 rounded-md border border-stone-700">${u.code}</span>
+                                            ${u.role === 'admin' ? '<span class="text-[10px] bg-stone-800 text-stone-300 px-2 py-0.5 rounded-md border border-stone-700">관리자</span>' : ''}
+                                        </div>
+                                        <div class="text-xs text-stone-400 font-medium">비번: <span class="text-stone-200 font-mono">${u.pw}</span> | 잔액: <span class="text-emerald-400 font-black">${u.balance.toLocaleString()}원</span> | 포인트: <span class="text-amber-400 font-bold">${(u.points || 0).toLocaleString()}P</span></div>
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button onclick="openEditInfoModal('${u.code}')" class="bg-stone-800 hover:bg-stone-700 text-stone-200 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer">정보수정</button>
+                                        <button onclick="openEditMoneyModal('${u.code}')" class="bg-stone-100 hover:bg-white text-stone-950 px-3 py-2 rounded-xl text-xs font-black transition cursor-pointer shadow">머니수정</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function openModal(title, bodyHTML, onSubmit) {
+            const modal = document.getElementById('custom-modal');
+            const titleEl = document.getElementById('modal-title');
+            const bodyEl = document.getElementById('modal-body');
+            const submitBtn = document.getElementById('modal-submit-btn');
+
+            titleEl.innerText = title;
+            bodyEl.innerHTML = bodyHTML;
+            modal.classList.remove('hidden');
+
+            const newBtn = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(newBtn, submitBtn);
+            newBtn.addEventListener('click', onSubmit);
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        function adminEditUserInfo(targetCode) {
+            const target = users.find(u => u.code === targetCode);
+            if (!target) return;
+
+            const bodyHTML = `
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1.5 font-semibold">새로운 아이디</label>
+                    <input type="text" id="modal-input-id" value="${target.id}" class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-4 py-3 text-sm text-stone-100 focus:outline-none focus:border-stone-500">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1.5 font-semibold">새로운 비밀번호</label>
+                    <input type="text" id="modal-input-pw" value="${target.pw}" class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-4 py-3 text-sm text-stone-100 focus:outline-none focus:border-stone-500">
+                </div>
+            `;
+
+            openModal("회원 정보 수정", bodyHTML, () => {
+                const newId = document.getElementById('modal-input-id').value.trim();
+                const newPw = document.getElementById('modal-input-pw').value.trim();
+
+                if (!newId || !newPw) {
+                    alert('아이디와 비밀번호를 모두 입력해주세요.');
+                    return;
+                }
+
+                target.id = newId;
+                target.pw = newPw;
+                saveData();
+                closeModal();
+                alert('회원 정보가 성공적으로 수정되었습니다!');
+                render();
+            });
+        }
+
+        function adminModifyByCode(targetCode) {
+            const target = users.find(u => u.code === targetCode);
+            if (!target) return;
+
+            const bodyHTML = `
+                <div>
+                    <label class="text-xs text-stone-400 block mb-1">회원 아이디: <span class="text-stone-100 font-bold">${target.id}</span></label>
+                    <label class="text-xs text-stone-400 block mb-1.5 mt-3 font-semibold">새로운 보유머니</label>
+                    <input type="number" id="modal-input-money" value="${target.balance}" class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-4 py-3 text-sm text-stone-100 focus:outline-none focus:border-stone-500">
+                </div>
+            `;
+
+            openModal("회원 머니 수정", bodyHTML, () => {
+                const newBal = parseInt(document.getElementById('modal-input-money').value);
+                if (isNaN(newBal) || newBal < 0) {
+                    alert('올바른 금액을 입력해주세요.');
+                    return;
+                }
+
+                target.balance = newBal;
+                saveData();
+                closeModal();
+                alert(`${target.id}님의 잔액이 ${newBal.toLocaleString()}원으로 수정되었습니다.`);
+                render();
+            });
+        }
+
+        function openEditInfoModal(code) { adminEditUserInfo(code); }
+        function openEditMoneyModal(code) { adminModifyByCode(code); }
+
+        function startBaccaratTimer() {
+            stopBaccaratTimer();
+            if (isBacDealing) return;
+
+            timeLeft = 10;
+            canBet = true;
+            hasPlacedBetThisRound = false; 
+            updateTimerDisplay();
+            render(); 
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimerDisplay();
+
+                if (timeLeft <= 2 && canBet) {
+                    canBet = false;
+                    const msgEl = document.getElementById('bac-message');
+                    if (msgEl && !isBacDealing) {
+                        msgEl.innerText = "배팅 마감! 딜링 중...";
+                    }
+                    render(); 
+                }
+
+                if (timeLeft <= 0) {
+                    stopBaccaratTimer();
+                    executeAutoGameRound();
+                }
+            }, 1000);
+        }
+
+        function stopBaccaratTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function updateTimerDisplay() {
+            const timerEl = document.getElementById('bac-timer');
+            if (timerEl) {
+                timerEl.innerText = `${timeLeft}초`;
+                if (timeLeft <= 2) {
+                    timerEl.className = "font-black text-rose-500 animate-pulse";
+                } else {
+                    timerEl.className = "font-black text-amber-400";
+                }
+            }
+        }
+
+        function placeBetAndConfirm() {
+            if (isBacDealing) return;
+            if (!canBet) {
+                alert('배팅 시간이 마감되었습니다! 다음 판을 기다려주세요.');
+                return;
+            }
+
+            const inputVal = parseInt(document.getElementById('bac-amount-input')?.value || 0);
+            if (!inputVal || inputVal <= 0) {
+                alert('올바른 배팅 금액을 입력해주세요.');
+                return;
+            }
+            if (currentUser.balance < inputVal) {
+                alert('보유 잔액이 부족합니다! 관리자에게 문의하세요.');
+                return;
+            }
+
+            currentBetAmount = inputVal;
+            hasPlacedBetThisRound = true;
+            currentUser.balance -= currentBetAmount;
+
+            // 배팅 금액의 0.05% 포인트 적립
+            const earnedPoints = currentBetAmount * 0.0005;
+            currentUser.points = (currentUser.points || 0) + earnedPoints;
+
+            updateUserBalance();
+
+            const msgEl = document.getElementById('bac-message');
+            if (msgEl) msgEl.innerText = `배팅 완료! (+${earnedPoints.toFixed(2)}P 적립)`;
+            
+            render();
+        }
+
+        function executeAutoGameRound() {
+            if (isBacDealing) return;
+            isBacDealing = true;
+            canBet = false;
+
+            lastGameMessage = "카드 딜링 및 스퀴즈 진행 중...";
+            lastPlayerCards = [];
+            lastBankerCards = [];
+            lastPlayerScore = 0;
+            lastBankerScore = 0;
+            render();
+
+            setTimeout(() => {
+                const suits = ['♠', '♥', '♦', '♣'];
+                const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+                const getCard = () => {
+                    const suit = suits[Math.floor(Math.random() * suits.length)];
+                    const value = values[Math.floor(Math.random() * values.length)];
+                    let score = ['J','Q','K','10'].includes(value) ? 0 : value === 'A' ? 1 : parseInt(value);
+                    return { suit, value, score };
+                };
+
+                lastPlayerCards = [getCard(), getCard()];
+                lastBankerCards = [getCard(), getCard()];
+                lastPlayerScore = (lastPlayerCards[0].score + lastPlayerCards[1].score) % 10;
+                lastBankerScore = (lastBankerCards[0].score + lastBankerCards[1].score) % 10;
+
+                setTimeout(() => {
+                    let winMsg = "";
+                    let roundWinner = '';
+                    
+                    if (lastPlayerScore > lastBankerScore) {
+                        winMsg = "🎉 플레이어 승리!";
+                        roundWinner = 'P';
+                    } else if (lastBankerScore > lastPlayerScore) {
+                        winMsg = "🏦 뱅커 승리!";
+                        roundWinner = 'B';
+                    } else {
+                        winMsg = "🤝 무승부 (TIE)!";
+                        roundWinner = 'T';
+                    }
+
+                    gameHistory.push(roundWinner);
+
+                    if (hasPlacedBetThisRound) {
+                        let payout = 0;
+                        if (roundWinner === 'P' && bacBetType === 'player') payout = currentBetAmount * 2;
+                        else if (roundWinner === 'B' && bacBetType === 'banker') payout = Math.floor(currentBetAmount * 1.95);
+                        else if (roundWinner === 'T') {
+                            if (bacBetType === 'tie') payout = currentBetAmount * 9;
+                            else payout = currentBetAmount; 
+                        }
+
+                        if (payout > 0) {
+                            currentUser.balance += payout;
+                            if (
+                                (roundWinner === 'P' && bacBetType === 'player') ||
+                                (roundWinner === 'B' && bacBetType === 'banker') ||
+                                (roundWinner === 'T' && bacBetType === 'tie')
+                            ) {
+                                winMsg += ` 당첨! (+${payout.toLocaleString()}원)`;
+                            } else if (roundWinner === 'T') {
+                                winMsg += ` 무승부 반환 (+${payout.toLocaleString()}원)`;
+                            } else {
+                                winMsg += ` 미적중`;
+                            }
+                        } else {
+                            winMsg += ` 미적중`;
+                        }
+                        updateUserBalance();
+                    } else {
+                        winMsg += ` (배팅 패스)`;
+                    }
+
+                    lastGameMessage = winMsg;
+                    isBacDealing = false;
+                    hasPlacedBetThisRound = false;
+                    currentBetAmount = 0;
+
+                    setTimeout(() => {
+                        if (currentTab === 'baccarat') {
+                            startBaccaratTimer();
+                        }
+                    }, 3000);
+                }, 800);
+            }, 600);
+        }
+
+        function renderBaccarat() {
+            const renderCardsHTML = (cards) => {
+                if (!cards || cards.length === 0) return '<span class="text-xs text-stone-500 italic">에볼루션 딜러 대기중...</span>';
+                return cards.map(c => {
+                    const isRed = c.suit === '♥' || c.suit === '♦';
+                    return `<div class="bg-white ${isRed ? 'text-rose-600' : 'text-stone-950'} w-14 h-20 rounded-2xl flex flex-col justify-between p-2 font-black text-sm shadow-2xl border border-stone-200 card-anim">
+                        <span>${c.value}</span><span class="self-center text-xl">${c.suit}</span><span class="self-end rotate-180">${c.value}</span>
+                    </div>`;
+                }).join('');
+            };
+
+            const recentHistory = gameHistory.slice(-24);
+            const scoreboardHTML = recentHistory.map(res => {
+                let bgClass = "bg-sky-600 text-white"; 
+                let text = "P";
+                if (res === 'B') {
+                    bgClass = "bg-rose-600 text-white"; 
+                    text = "B";
+                } else if (res === 'T') {
+                    bgClass = "bg-emerald-600 text-white"; 
+                    text = "T";
+                }
+                return `<div class="w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center ${bgClass} shadow-md">${text}</div>`;
+            }).join('');
+
+            const isDisabled = hasPlacedBetThisRound || isBacDealing || !canBet;
+            const dealBtnText = hasPlacedBetThisRound ? "✔️ 배팅 완료" : "🚀 배팅 확정";
+            const dealBtnClass = hasPlacedBetThisRound ? "bg-emerald-600 text-white cursor-not-allowed opacity-90 shadow-none" : "bg-stone-100 hover:bg-white text-stone-950 cursor-pointer shadow-xl";
+
+            return `
+                <header class="bg-stone-900/80 backdrop-blur-md px-8 py-4 border-b border-stone-800 flex justify-between items-center w-full">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 bg-emerald-500 rounded-full animate-ping"></span>
+                        <h1 class="font-black text-sm text-stone-100 tracking-wider">EVOLUTION SPEED BACCARAT</h1>
+                    </div>
+                    <div class="flex gap-4 items-center">
+                        <span class="text-xs font-bold text-emerald-400 bg-stone-950 px-4 py-2 rounded-xl border border-stone-800">자산: ${currentUser.balance.toLocaleString()} 원</span>
+                        <span class="text-xs font-bold text-amber-400 bg-stone-950 px-4 py-2 rounded-xl border border-stone-800">포인트: ${(currentUser.points || 0).toLocaleString()} P</span>
+                    </div>
+                </header>
+                <div class="flex-1 p-8 space-y-6 w-full max-w-5xl mx-auto">
+                    
+                    <!-- 에볼루션 와이드 라이브 스튜디오 화면 -->
+                    <div class="bg-stone-900 rounded-3xl p-8 border border-stone-800 shadow-2xl space-y-6 relative overflow-hidden bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-stone-800 via-stone-900 to-stone-950 studio-glow">
+                        <div class="absolute top-4 right-6 flex items-center gap-2.5">
+                            <span class="text-[10px] bg-rose-600 text-white px-3 py-1 rounded-md font-black tracking-widest uppercase shadow">LIVE SQUEEZE</span>
+                            <span class="text-[11px] text-stone-400 font-semibold">HD STUDIO</span>
+                        </div>
+                        
+                        <div class="flex justify-between items-center pt-4">
+                            <div class="space-y-1">
+                                <span class="text-xs font-black text-rose-500 uppercase tracking-wider">BANKER</span>
+                                <div id="bac-banker-score" class="text-4xl font-black text-stone-100">${lastBankerScore}</div>
+                            </div>
+                            <div id="bac-banker-cards" class="flex gap-3 min-h-[80px] items-center">
+                                ${renderCardsHTML(lastBankerCards)}
+                            </div>
+                        </div>
+
+                        <div class="border-t border-stone-800/80"></div>
+
+                        <div class="flex justify-between items-center">
+                            <div class="space-y-1">
+                                <span class="text-xs font-black text-sky-400 uppercase tracking-wider">PLAYER</span>
+                                <div id="bac-player-score" class="text-4xl font-black text-stone-100">${lastPlayerScore}</div>
+                            </div>
+                            <div id="bac-player-cards" class="flex gap-3 min-h-[80px] items-center">
+                                ${renderCardsHTML(lastPlayerCards)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="bac-message" class="text-center text-amber-300 font-bold text-xs h-10 flex items-center justify-center bg-stone-900/80 rounded-2xl border border-stone-800 shadow-inner">
+                        ${lastGameMessage}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-3 gap-3">
+                                <button onclick="setBacBetType('player')" id="bac-btn-player" ${isDisabled ? 'disabled' : ''} class="bac-btn bg-stone-900 p-4 rounded-2xl font-bold text-xs flex flex-col items-center border ${bacBetType === 'player' ? 'ring-2 ring-sky-500 border-sky-400 bg-sky-950/30' : 'border-stone-800'} ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-stone-800/80 cursor-pointer'} transition">
+                                    <span class="text-sky-400 font-black text-sm">PLAYER</span><span class="text-[11px] text-stone-400 mt-1">1 : 1</span>
+                                </button>
+                                <button onclick="setBacBetType('tie')" id="bac-btn-tie" ${isDisabled ? 'disabled' : ''} class="bac-btn bg-stone-900 p-4 rounded-2xl font-bold text-xs flex flex-col items-center border ${bacBetType === 'tie' ? 'ring-2 ring-emerald-500 border-emerald-400 bg-emerald-950/30' : 'border-stone-800'} ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-stone-800/80 cursor-pointer'} transition">
+                                    <span class="text-emerald-400 font-black text-sm">TIE</span><span class="text-[11px] text-stone-400 mt-1">8 : 1</span>
+                                </button>
+                                <button onclick="setBacBetType('banker')" id="bac-btn-banker" ${isDisabled ? 'disabled' : ''} class="bac-btn bg-stone-900 p-4 rounded-2xl font-bold text-xs flex flex-col items-center border ${bacBetType === 'banker' ? 'ring-2 ring-rose-500 border-rose-400 bg-rose-950/30' : 'border-stone-800'} ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-stone-800/80 cursor-pointer'} transition">
+                                    <span class="text-rose-500 font-black text-sm">BANKER</span><span class="text-[11px] text-stone-400 mt-1">0.95 : 1</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-stone-900 p-6 rounded-3xl border border-stone-800 space-y-4 shadow-xl">
+                            <div class="flex justify-between items-center px-1">
+                                <span class="text-[11px] text-stone-400 font-bold uppercase tracking-wider">💰 배팅 금액 직접 입력 (0.05% 포인트 적립)</span>
+                                <div class="text-xs bg-stone-950 px-3 py-1.5 rounded-xl border border-stone-800 text-stone-300">
+                                    남은시간: <span id="bac-timer" class="font-black text-amber-400 text-xs">10초</span>
+                                </div>
+                            </div>
+                            <input type="number" id="bac-amount-input" value="1000" ${isDisabled ? 'disabled' : ''} class="w-full bg-stone-950 border border-stone-800 rounded-2xl px-5 py-3.5 text-sm font-black text-stone-100 focus:outline-none focus:border-stone-500 ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}" placeholder="배팅 금액을 입력하세요">
+                            <button onclick="placeBetAndConfirm()" id="bac-deal-btn" ${isDisabled ? 'disabled' : ''} class="w-full font-black py-4 rounded-2xl text-xs transition ${dealBtnClass}">
+                                ${dealBtnText}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 슈(Shoe) 실시간 공통 그림장 -->
+                    <div class="bg-stone-900 rounded-3xl p-6 border border-stone-800 shadow-2xl space-y-3 mb-8">
+                        <div class="flex justify-between items-center text-xs text-stone-400 font-bold px-1">
+                            <span>📊 슈(Shoe) 실시간 공통 그림장</span>
+                            <span>총 ${gameHistory.length}게임</span>
+                        </div>
+                        <div class="grid grid-cols-8 md:grid-cols-12 gap-2 min-h-[56px] items-center bg-stone-950 p-4 rounded-2xl border border-stone-800/80">
+                            ${scoreboardHTML || '<div class="col-span-full text-center text-xs text-stone-500 italic">아직 기록된 게임이 없습니다.</div>'}
+                        </div>
+                    </div>
+
+                </div>
+            `;
+        }
+
+        function setBacBetType(type) {
+            if (isBacDealing || !canBet || hasPlacedBetThisRound) return;
+            bacBetType = type;
+            render();
+        }
+
+        function updateUserBalance() {
+            const idx = users.findIndex(u => u.id === currentUser.id);
+            if (idx !== -1) {
+                users[idx].balance = currentUser.balance;
+                users[idx].points = currentUser.points;
+            }
+            saveData();
+        }
+
+        render();
+        if (currentUser && currentTab === 'baccarat') {
+            startBaccaratTimer();
+        }
+    </script>
+</body>
+</html>
+
